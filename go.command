@@ -40,11 +40,22 @@ cmd_build(){
   command -v cargo >/dev/null 2>&1 || { c_err "未找到 cargo/Rust（打包需要）。安装：https://rustup.rs"; exit 1; }
   ensure_deps
   VER="$(cat VERSION 2>/dev/null | tr -d '[:space:]')"; VER="${VER:-1.0.0}"
-  c_warn "打包 v${VER}（stage + tauri build，首次编译较久）…"
+  c_warn "打包 v${VER}（stage + tauri build，含 .dmg，首次编译较久）…"
   npm run app:build
   APP="src-tauri/target/release/bundle/macos/autopost-studio.app"
   [ -d "$APP" ] || { c_err "未生成 .app"; exit 1; }
   OUT="$ROOT/dist-installer"; mkdir -p "$OUT"
+
+  # 1) .dmg（标准 macOS 安装：拖到「应用程序」）
+  DMG="$(ls -t src-tauri/target/release/bundle/dmg/*.dmg 2>/dev/null | head -1)"
+  if [ -n "$DMG" ]; then
+    cp -f "$DMG" "$OUT/autopost-studio-v${VER}.dmg"
+    c_ok "DMG 已生成：$OUT/autopost-studio-v${VER}.dmg"
+  else
+    c_warn "未找到 .dmg（dmg 目标可能失败），仅产出下面的 zip。"
+  fi
+
+  # 2) zip + 一键安装脚本（未签名/未公证时更顺：脚本自动去隔离）
   STAGE="$(mktemp -d)"; cp -R "$APP" "$STAGE/"
   # 给收件人的一键安装脚本（去隔离 + 移到 /应用程序 + 启动）
   cat > "$STAGE/安装.command" <<'INS'
@@ -68,11 +79,13 @@ autopost-studio v$VER
 需要：本机装有 Chrome / Edge / Brave（Chromium 内核）浏览器。
 首次进入「设置」选择浏览器、填 AI 密钥即可使用。
 TXT
-  ZIP="$OUT/autopost-studio-v$VER.zip"
+  ZIP="$OUT/autopost-studio-v${VER}.zip"
   rm -f "$ZIP"; ( cd "$STAGE" && zip -q -r -y "$ZIP" "autopost-studio.app" "安装.command" "使用说明.txt" )
   rm -rf "$STAGE"
-  c_ok "安装包已生成：$ZIP"
-  c_ok "直接把这个 zip 发给别人即可。"
+  c_ok "zip(含一键安装脚本)：$ZIP"
+  echo ""
+  c_warn "提示：未做苹果公证。.dmg 拖装后首次打开可能被拦——需「右键→打开」或系统设置里允许；"
+  c_warn "      未签名时 zip 里的「安装.command」会自动去隔离，对方更省事。要彻底免拦需签名+公证。"
   open "$OUT"
 }
 
