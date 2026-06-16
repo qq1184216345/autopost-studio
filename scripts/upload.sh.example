@@ -1,0 +1,19 @@
+#!/bin/bash
+# 可选：自动上传 release.json 到你的 update_url 主机。
+# 用法：把本文件复制成 scripts/upload.sh 并 chmod +x，填上你的上传命令。
+# go.command release 会自动调用： ./scripts/upload.sh <release.json 绝对路径>
+set -euo pipefail
+REL="$1"   # dist/release.json 的绝对路径
+
+# —— 按你的托管方式二选一/自定义（取消注释并改成你的）——
+
+# A) scp 到自己的服务器（确保最终 https URL = 你 App 里填的 update_url）
+# scp "$REL" user@your-server:/var/www/autopost/release.json
+
+# B) 阿里云 OSS（需装 ossutil）
+# ossutil cp -f "$REL" oss://your-bucket/autopost/release.json
+
+# C) GitHub Releases（需 gh，固定 tag 便于覆盖）
+# gh release upload latest "$REL" --clobber --repo you/your-repo
+
+echo "（示例脚本）请编辑 scripts/upload.sh 填入你的上传命令。release.json: $REL"

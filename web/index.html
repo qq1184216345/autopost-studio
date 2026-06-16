@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>autopost-studio</title>
+<script>
+  (function(){ try{ var c=localStorage.getItem('aps-theme')||'system';
+    var d=c==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):c;
+    document.documentElement.setAttribute('data-theme',d);}catch(e){} })();
+</script>
+<link rel="stylesheet" href="/web/style.css" />
+</head>
+<body>
+<header>
+  <h1>🚀 autopost-studio</h1>
+  <nav class="tabs" id="tabs">
+    <button data-tab="templates" class="on">模板</button>
+    <button data-tab="accounts">账号</button>
+    <button data-tab="drafts">草稿箱</button>
+    <button data-tab="settings">设置</button>
+  </nav>
+  <span class="sp"></span>
+  <div class="seg" id="themeSeg" title="配色">
+    <button data-c="system" title="跟随系统">🖥</button>
+    <button data-c="light" title="亮色">☀️</button>
+    <button data-c="dark" title="暗色">🌙</button>
+  </div>
+  <span class="badge">本地 · 不依赖官方</span>
+</header>
+<main id="view"></main>
+<div id="modalRoot"></div>
+<script src="/web/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+node_modules/
+data/
+uploads/
+*.log
+.DS_Store
+src-tauri/app/
+src-tauri/target/
+dist/
+dist-installer/

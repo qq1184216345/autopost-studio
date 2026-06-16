@@ -1,0 +1,22 @@
+{
+  "name": "autopost-studio",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "模板/账号/草稿箱一体的通用社媒自动发布系统（本地 SQLite，自托管 UI 自动化，零官方依赖）",
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "start": "node server.mjs",
+    "tauri": "tauri",
+    "app": "tauri dev",
+    "stage": "node scripts/stage-bundle.mjs",
+    "app:build": "node scripts/stage-bundle.mjs && tauri build",
+    "release": "node scripts/build-update.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.61.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
