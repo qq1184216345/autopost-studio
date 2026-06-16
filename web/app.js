@@ -499,7 +499,7 @@ async function renderSettings() {
     if (!r.enabled) { info.textContent = '未配置更新地址'; return; }
     if (!r.hasUpdate) { info.textContent = `已是最新（${r.current}）`; return; }
     info.innerHTML = `发现新版本 <b>${esc(r.latest)}</b>（当前 ${esc(r.current)}）${r.notes ? '：' + esc(r.notes) : ''} <button class="run sm" id="s_apply">立即更新</button>`;
-    $('#s_apply').onclick = doUpdate;
+    $('#s_apply').onclick = () => runUpdate(r.latest, r.notes);
   };
   $('#s_save').onclick = async () => {
     await api('PUT', '/api/settings', { browser_path: $('#s_bpath').value.trim(), ai_key: $('#s_key').value.trim(), ai_base: $('#s_base').value.trim(), ai_model: $('#s_model').value.trim(), update_url: $('#s_upurl').value.trim() });
@@ -508,16 +508,66 @@ async function renderSettings() {
   $('#s_detect').click(); // 进页面自动检测一次
 }
 
-// 执行热更新：写入新代码 → 让原生壳重启后端并重载窗口
-async function doUpdate() {
-  const info = $('#s_upinfo') || $('#view');
-  if (info) info.innerHTML = '更新中…（写入新版本，稍后自动重载）';
-  const r = await api('POST', '/api/update/apply');
-  if (r.error || !r.ok) { alert('更新失败：' + (r.error || '未知')); return; }
-  // 重启后端 + 重载窗口（Tauri 环境）
-  const inv = window.__TAURI__?.core?.invoke;
-  if (inv) { try { await inv('restart_backend'); } catch (e) { /* 重载会中断连接，忽略 */ } }
-  else { alert('已更新到 ' + r.version + '，请手动刷新/重开应用'); location.reload(); }
+// 先检查再更新（用于「重试」入口）
+async function startUpdate() {
+  const r = await api('GET', '/api/update/check');
+  if (r.error) return alert('检查失败：' + r.error);
+  if (!r.hasUpdate) return alert('已是最新版本');
+  runUpdate(r.latest, r.notes);
+}
+
+// 带动画的更新流程：火箭 + 进度条 + 分步骤
+function runUpdate(latest, notes) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const ov = document.createElement('div'); ov.className = 'up-ov';
+  ov.innerHTML = `<div class="up-card">
+    <div class="up-rocket">🚀</div>
+    <div class="up-title">正在更新${latest ? ' 到 v' + esc(latest) : ''}</div>
+    <div class="up-sub" id="up-sub">请稍候，马上就好…</div>
+    <div class="up-bar" id="up-bar"><i></i></div>
+    <div class="up-steps">
+      <div class="up-step" data-k="fetch"><span class="dot"></span><span>获取新版本</span></div>
+      <div class="up-step" data-k="write"><span class="dot"></span><span>写入更新文件</span></div>
+      <div class="up-step" data-k="restart"><span class="dot"></span><span>重启并加载新版本</span></div>
+    </div>
+    ${notes ? `<div class="up-notes">📝 ${esc(notes)}</div>` : ''}
+  </div>`;
+  document.body.appendChild(ov);
+  const setStep = (k, cls) => { const el = ov.querySelector(`[data-k="${k}"]`); if (!el) return; el.className = 'up-step ' + cls; const d = el.querySelector('.dot'); if (cls === 'done') d.textContent = '✓'; else if (cls === 'err') d.textContent = '✕'; };
+  const fail = (msg) => {
+    $('#up-bar', ov).style.display = 'none';
+    $('#up-sub', ov).innerHTML = '<span style="color:var(--danger)">更新失败</span>';
+    const box = document.createElement('div'); box.style.marginTop = '14px';
+    box.innerHTML = `<div class="up-notes" style="color:var(--danger)">${esc(msg)}</div>
+      <div style="margin-top:14px;display:flex;gap:8px;justify-content:center">
+        <button class="run sm" id="up-retry">重试</button><button class="sm" id="up-close">关闭</button></div>`;
+    ov.querySelector('.up-card').appendChild(box);
+    $('#up-close', box).onclick = () => ov.remove();
+    $('#up-retry', box).onclick = () => { ov.remove(); startUpdate(); };
+  };
+  (async () => {
+    try {
+      setStep('fetch', 'active'); await sleep(550);
+      setStep('fetch', 'done'); setStep('write', 'active');
+      const r = await api('POST', '/api/update/apply');
+      if (!r || r.error || !r.ok) { setStep('write', 'err'); fail((r && r.error) || '写入失败'); return; }
+      await sleep(450); setStep('write', 'done');
+      setStep('restart', 'active'); $('#up-sub', ov).textContent = '正在重启应用…';
+      localStorage.setItem('aps-updated', latest || r.version || '');
+      await sleep(550);
+      // 兜底：壳重载若未触发，前端 8s 后自行刷新（届时后端已重启就绪）
+      setTimeout(() => location.reload(), 8000);
+      const inv = window.__TAURI__?.core?.invoke;
+      if (inv) { try { await inv('restart_backend'); } catch (e) { /* reload 会中断 */ } }
+      else { await sleep(800); location.reload(); }
+    } catch (e) { setStep('write', 'err'); fail(e.message); }
+  })();
+}
+
+function showToast(msg) {
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.transition = 'opacity .4s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, 2800);
 }
 
 // ---------- 批量删除 ----------
@@ -536,7 +586,7 @@ async function autoCheckUpdate() {
       const bar = document.createElement('div');
       bar.style.cssText = 'background:var(--acc2);color:#fff;padding:8px 14px;display:flex;gap:10px;align-items:center;font-size:13px';
       bar.innerHTML = `发现新版本 ${esc(r.latest)}（当前 ${esc(r.current)}）${r.notes ? ' · ' + esc(r.notes) : ''} <span style="flex:1"></span>`;
-      const btn = document.createElement('button'); btn.className = 'sm'; btn.textContent = '立即更新'; btn.onclick = doUpdate;
+      const btn = document.createElement('button'); btn.className = 'sm'; btn.textContent = '立即更新'; btn.onclick = () => { bar.remove(); runUpdate(r.latest, r.notes); };
       const x = document.createElement('button'); x.className = 'sm'; x.textContent = '稍后'; x.onclick = () => bar.remove();
       bar.append(btn, x);
       document.body.insertBefore(bar, document.querySelector('main'));
@@ -545,5 +595,13 @@ async function autoCheckUpdate() {
 }
 
 // ---------- 启动 ----------
-(async () => { applyTheme(); META = await api('GET', '/api/meta'); renderTemplates(); autoCheckUpdate(); })();
+(async () => {
+  applyTheme();
+  META = await api('GET', '/api/meta');
+  renderTemplates();
+  // 热更新完成后的成功提示
+  const upd = localStorage.getItem('aps-updated');
+  if (upd !== null) { localStorage.removeItem('aps-updated'); showToast('✅ 已更新到 v' + (META.version || upd)); }
+  else autoCheckUpdate();
+})();
 addEventListener('resize', () => { const wrap = $('#pw'); const f = wrap && $('iframe', wrap); if (wrap && f) sizeFrame(wrap, f); });
