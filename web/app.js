@@ -256,10 +256,21 @@ async function renderAccounts() {
       <div class="nm">${esc(a.name)}</div>
       <div class="pills"><span class="pill plat">${PLAT[a.platform] || a.platform}</span><span class="pill">${a.conn_mode === 'cdp' ? '外部CDP' : '本机浏览器'}</span></div>
       <div class="desc">品牌：${esc(a.brand_title || '-')}<br>${a.conn_mode === 'cdp' ? 'CDP：' + esc(a.cdp_url || '-') : '独立登录配置'}</div>
-      <div class="row" style="margin-top:8px"><button class="sm" data-edit="${a.id}">编辑</button></div>`;
+      <div class="row" style="margin-top:8px">
+        ${a.conn_mode === 'cdp' ? '' : `<button class="run sm" data-login="${a.id}">🔑 登录</button>`}
+        <button class="sm" data-edit="${a.id}">编辑</button>
+      </div>`;
     grid.appendChild(card);
     $('.chk', card).onchange = (e) => { e.target.checked ? accSel.add(a.id) : accSel.delete(a.id); card.classList.toggle('sel', e.target.checked); $('#accDel').disabled = !accSel.size; };
     $('[data-edit]', card).onclick = () => openAccountEditor(a);
+    const lg = $('[data-login]', card);
+    if (lg) lg.onclick = async () => {
+      lg.disabled = true; lg.textContent = '打开中…';
+      const r = await api('POST', `/api/accounts/${a.id}/login`);
+      lg.disabled = false; lg.textContent = '🔑 登录';
+      if (r.error) toast('打开失败：' + r.error, 'err');
+      else toast(`已打开浏览器，请在其中登录${PLAT[a.platform] || ''}（登录后关掉那个窗口即可）`);
+    };
   }
 }
 function openAccountEditor(a) {
