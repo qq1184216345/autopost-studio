@@ -49,6 +49,27 @@ function modal(html) {
 const closeModal = () => { $('#modalRoot').innerHTML = ''; };
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
+// 轻提示 + 自定义确认（WKWebView 里原生 alert/confirm 常不弹，统一用自绘）
+function toast(msg, kind = 'ok') {
+  const t = document.createElement('div'); t.className = 'toast' + (kind === 'ok' ? '' : ' ' + kind); t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.transition = 'opacity .4s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, kind === 'err' ? 4000 : 2600);
+}
+function confirmDialog(message) {
+  return new Promise((resolve) => {
+    const ov = document.createElement('div'); ov.className = 'up-ov';
+    ov.innerHTML = `<div class="up-card" style="width:380px;text-align:left">
+      <div style="font-size:15px;margin-bottom:18px;white-space:pre-wrap">${esc(message)}</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="sm" id="cf-no">取消</button><button class="run sm" id="cf-yes">确定</button></div></div>`;
+    document.body.appendChild(ov);
+    const done = (v) => { ov.remove(); resolve(v); };
+    $('#cf-no', ov).onclick = () => done(false);
+    $('#cf-yes', ov).onclick = () => done(true);
+    ov.addEventListener('mousedown', (e) => { if (e.target === ov) done(false); });
+  });
+}
+
 // ---------- tabs ----------
 const TABS = { templates: renderTemplates, accounts: renderAccounts, drafts: renderDrafts, settings: renderSettings };
 $$('#tabs button').forEach((b) => b.onclick = () => {
@@ -87,7 +108,7 @@ async function renderTemplates() {
     mountPreview($('.prev', card), { brandTitle: t.name, spec: t.spec, visual: t.spec.visual });
     $('.chk', card).onchange = (e) => { e.target.checked ? tplSel.add(t.id) : tplSel.delete(t.id); card.classList.toggle('sel', e.target.checked); $('#tplDel').disabled = !tplSel.size; };
     $('[data-edit]', card).onclick = () => openTemplateEditor(t);
-    $('[data-exp]', card).onclick = async () => { const r = await api('POST', `/api/templates/${t.id}/export`); if (r.ok) alert('已导出模板文件（.apstpl）并打开所在文件夹：\n' + r.path); else alert('导出失败: ' + (r.error || '')); };
+    $('[data-exp]', card).onclick = async () => { const r = await api('POST', `/api/templates/${t.id}/export`); if (r.ok) toast('已导出模板并打开所在文件夹'); else toast('导出失败: ' + (r.error || ''), 'err'); };
   }
 }
 // 导入模板：选 .apstpl/.json 文件 → 解析 → 落库
@@ -95,9 +116,9 @@ function importTemplate() {
   const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.apstpl,.json,application/json';
   inp.onchange = async () => {
     const f = inp.files[0]; if (!f) return;
-    let obj; try { obj = JSON.parse(await f.text()); } catch { return alert('文件不是有效的 JSON'); }
+    let obj; try { obj = JSON.parse(await f.text()); } catch { toast('文件不是有效的 JSON', 'err'); return; }
     const r = await api('POST', '/api/templates/import', obj);
-    if (r.ok) { alert('已导入模板：' + r.name); renderTemplates(); } else alert('导入失败: ' + (r.error || ''));
+    if (r.ok) { toast('已导入模板：' + r.name); renderTemplates(); } else toast('导入失败: ' + (r.error || ''), 'err');
   };
   inp.click();
 }
@@ -208,7 +229,7 @@ function openTemplateEditor(tpl, isNew) {
   $('#t_save', ov).onclick = async () => {
     const cur = collect();
     const r = cur.id ? await api('PUT', '/api/templates/' + cur.id, cur) : await api('POST', '/api/templates', cur);
-    if (r.ok) { closeModal(); renderTemplates(); } else alert('保存失败: ' + (r.error || ''));
+    if (r.ok) { closeModal(); renderTemplates(); } else toast('保存失败: ' + (r.error || ''), 'err');
   };
 }
 
@@ -272,7 +293,7 @@ function openAccountEditor(a) {
   $('#a_save', ov).onclick = async () => {
     const b = { name: $('#a_name').value.trim(), platform: $('#a_plat').value, conn_mode: $('#a_mode').value, cdp_url: (cdp || $('#a_mode').value === 'cdp') ? ($('#a_cdp') ? $('#a_cdp').value.trim() : '') : '', brand_title: $('#a_brand').value.trim(), note: $('#a_note').value.trim() };
     const r = a.id ? await api('PUT', '/api/accounts/' + a.id, b) : await api('POST', '/api/accounts', b);
-    if (r.ok) { closeModal(); renderAccounts(); } else alert('保存失败');
+    if (r.ok) { closeModal(); renderAccounts(); } else toast('保存失败', 'err');
   };
 }
 
@@ -312,7 +333,7 @@ async function renderDrafts() {
 
 async function newDraft() {
   const tpls = await api('GET', '/api/templates');
-  if (!tpls.length) { alert('请先到「模板」创建一个模板'); return; }
+  if (!tpls.length) { toast('请先到「模板」创建一个模板', 'warn'); return; }
   const ov = modal(`<div class="modal" style="max-width:520px"><h2>新建草稿</h2>
     <label>选择模板</label><select id="nd_tpl">${tpls.map((t) => `<option value="${t.id}">${esc(t.name)}（${t.platforms.map((p) => PLAT[p]).join('/')}）</option>`).join('')}</select>
     <label>品牌标题（配图大字，默认用模板名）</label><input id="nd_brand" placeholder="如 张口就来">
@@ -383,7 +404,7 @@ async function openDraft(id) {
     const go = $('#d_addgo', ov); if (go) go.onclick = async () => {
       const ids = $$('#d_addable input:checked').map((x) => +x.value); if (!ids.length) return;
       const r = await api('POST', `/api/drafts/${id}/targets`, { accountIds: ids });
-      if (r.skipped && r.skipped.length) alert('部分未添加：' + r.skipped.map((s) => s.reason).join('、'));
+      if (r.skipped && r.skipped.length) toast('部分未添加：' + r.skipped.map((s) => s.reason).join('、'), 'warn');
       refresh();
     };
   };
@@ -417,10 +438,22 @@ async function openDraft(id) {
     closeModal(); openDraft(id);
   };
   $('#d_pub', ov).onclick = async () => {
-    const tids = $$('.tsel:checked', ov).map((x) => x.dataset.tid);
-    if (!tids.length) return alert('请勾选要发布的目标账号');
+    const log = $('#d_publog', ov); log.style.display = 'block';
+    let tids = $$('.tsel:checked', ov).map((x) => x.dataset.tid);
+    // 没有已添加的目标：把下方「添加账号」里勾选的自动加为目标再发（省去「添加选中」这一步）
+    if (!tids.length) {
+      const pend = $$('#d_addable input:checked', ov).map((x) => +x.value);
+      if (pend.length) {
+        log.innerHTML = '<span class="step">添加目标账号…</span>\n';
+        const r = await api('POST', `/api/drafts/${id}/targets`, { accountIds: pend });
+        if (r.skipped && r.skipped.length) toast('部分未添加：' + r.skipped.map((s) => s.reason).join('、'), 'warn');
+        await refresh();
+        tids = $$('.tsel:checked', ov).map((x) => x.dataset.tid);
+      }
+    }
+    if (!tids.length) { log.innerHTML = '<span class="err">请先勾选要发布的账号（上方「发布目标账号」里勾选，或下方「添加账号」里勾选后再点发布）</span>\n'; return; }
     const mode = $('#d_mode').value;
-    const log = $('#d_publog', ov); log.style.display = 'block'; log.innerHTML = '';
+    log.innerHTML = '';
     const es = new EventSource(`/api/drafts/${id}/publish?targets=${tids.join(',')}&mode=${mode}`);
     es.onmessage = (ev) => { const cls = /✅/.test(ev.data) ? 'ok' : /❌|⚠️/.test(ev.data) ? 'err' : /^[①②③]/.test(ev.data) ? 'step' : ''; log.innerHTML += `<span class="${cls}">${esc(ev.data)}</span>\n`; log.scrollTop = log.scrollHeight; };
     es.addEventListener('done', () => { es.close(); log.innerHTML += '<span class="ok">— 完成 —</span>\n'; refresh(); });
@@ -474,15 +507,15 @@ async function renderSettings() {
     const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.apsbak,.json,application/json';
     inp.onchange = async () => {
       const f = inp.files[0]; if (!f) return;
-      if (!confirm('还原会用备份覆盖当前全部数据（模板/账号/草稿/设置），确定？')) return;
+      if (!(await confirmDialog('还原会用备份覆盖当前全部数据（模板/账号/草稿/设置），确定？'))) return;
       const info = $('#s_bakinfo'); info.textContent = '还原中…';
-      let obj; try { obj = JSON.parse(await f.text()); } catch { return alert('文件不是有效的备份(.apsbak)'); }
+      let obj; try { obj = JSON.parse(await f.text()); } catch { toast('文件不是有效的备份(.apsbak)', 'err'); return; }
       const r = await api('POST', '/api/restore', obj);
       if (!r.ok) { info.innerHTML = `<span style="color:var(--danger)">还原失败：${esc(r.error || '')}</span>`; return; }
       info.textContent = '已写入，正在重启应用以加载还原的数据…';
       const inv = window.__TAURI__?.core?.invoke;
       if (inv) { try { await inv('restart_backend'); } catch (e) { /* reload 会断连 */ } }
-      else { alert('已还原，请重开应用生效'); location.reload(); }
+      else { toast('已还原，请重开应用生效'); setTimeout(() => location.reload(), 800); }
     };
     inp.click();
   };
@@ -511,8 +544,8 @@ async function renderSettings() {
 // 先检查再更新（用于「重试」入口）
 async function startUpdate() {
   const r = await api('GET', '/api/update/check');
-  if (r.error) return alert('检查失败：' + r.error);
-  if (!r.hasUpdate) return alert('已是最新版本');
+  if (r.error) return toast('检查失败：' + r.error, 'err');
+  if (!r.hasUpdate) return toast('已是最新版本');
   runUpdate(r.latest, r.notes);
 }
 
@@ -564,16 +597,12 @@ function runUpdate(latest, notes) {
   })();
 }
 
-function showToast(msg) {
-  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => { t.style.transition = 'opacity .4s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, 2800);
-}
+const showToast = (msg) => toast(msg, 'ok');
 
 // ---------- 批量删除 ----------
 async function batchDel(table, set, rerender) {
   if (!set.size) return;
-  if (!confirm(`确认删除选中的 ${set.size} 项？`)) return;
+  if (!(await confirmDialog(`确认删除选中的 ${set.size} 项？`))) return;
   await api('DELETE', '/api/' + table, { ids: [...set] });
   rerender();
 }
