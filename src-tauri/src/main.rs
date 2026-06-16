@@ -4,6 +4,7 @@
 use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -11,6 +12,9 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 const PORT: u16 = 8787;
 
 struct ServerProc(Mutex<Option<Child>>);
+
+static SHUTTING_DOWN: AtomicBool = AtomicBool::new(false);
+static RESPAWNS: AtomicU32 = AtomicU32::new(0);
 
 // 只读底座目录（含 node 二进制 + 代码 + seed.mjs）。release=资源 app/；dev=源码根。
 fn bundle_dir(app: &AppHandle) -> PathBuf {
@@ -73,6 +77,7 @@ fn spawn_backend(app: &AppHandle) -> Child {
     cmd.arg("server.mjs")
         .current_dir(&run_dir)
         .env("PORT", PORT.to_string());
+    cmd.env("APS_SUPERVISOR", "1"); // 告知前端：壳支持后端退出后自动拉起
     if bundled {
         cmd.env("APS_BUNDLED", "1");
         if let Ok(data) = app.path().app_data_dir() {
@@ -118,10 +123,34 @@ fn main() {
                 .inner_size(1280.0, 860.0)
                 .min_inner_size(900.0, 600.0)
                 .build()?;
+
+            // 守护：后端进程意外退出(如热更新后自我退出)则自动拉起新进程并重载窗口。
+            let h = handle.clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(Duration::from_millis(1000));
+                if SHUTTING_DOWN.load(Ordering::SeqCst) { break; }
+                let exited = {
+                    let st = h.state::<ServerProc>();
+                    let mut g = st.0.lock().unwrap();
+                    match g.as_mut() { Some(c) => matches!(c.try_wait(), Ok(Some(_))), None => true }
+                };
+                if exited && !SHUTTING_DOWN.load(Ordering::SeqCst) {
+                    if RESPAWNS.fetch_add(1, Ordering::SeqCst) > 20 { break; } // 防崩溃循环
+                    std::thread::sleep(Duration::from_millis(400));
+                    let nc = spawn_backend(&h);
+                    {
+                        let st = h.state::<ServerProc>();
+                        *st.0.lock().unwrap() = Some(nc);
+                    }
+                    wait_port(PORT);
+                    if let Some(w) = h.get_webview_window("main") { let _ = w.eval("location.reload()"); }
+                }
+            });
             Ok(())
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
+                SHUTTING_DOWN.store(true, Ordering::SeqCst);
                 if let Some(state) = window.app_handle().try_state::<ServerProc>() {
                     if let Some(mut child) = state.0.lock().unwrap().take() {
                         let _ = child.kill();

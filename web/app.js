@@ -587,12 +587,22 @@ function runUpdate(latest, notes) {
       await sleep(450); setStep('write', 'done');
       setStep('restart', 'active'); $('#up-sub', ov).textContent = '正在重启应用…';
       localStorage.setItem('aps-updated', latest || r.version || '');
-      await sleep(550);
-      // 兜底：壳重载若未触发，前端 8s 后自行刷新（届时后端已重启就绪）
-      setTimeout(() => location.reload(), 8000);
-      const inv = window.__TAURI__?.core?.invoke;
-      if (inv) { try { await inv('restart_backend'); } catch (e) { /* reload 会中断 */ } }
-      else { await sleep(800); location.reload(); }
+      await sleep(400);
+      // 触发后端重启：优先让后端自我退出（壳守护会自动拉起全新进程，最可靠）；
+      // 老壳无守护则退回 Tauri restart_backend 命令。
+      if (META && META.supervisor) {
+        await api('POST', '/api/_restart').catch(() => {});
+      } else {
+        const inv = window.__TAURI__?.core?.invoke;
+        if (inv) inv('restart_backend').catch(() => {});
+      }
+      // 轮询后端恢复（重启期间会短暂 502/断连），恢复后整页重载 → 新前端+新后端
+      await sleep(800);
+      for (let i = 0; i < 60; i++) {
+        try { const rr = await fetch('/api/meta', { cache: 'no-store' }); if (rr.ok) { await sleep(400); break; } } catch (e) { /* 后端重启中 */ }
+        await sleep(500);
+      }
+      location.reload();
     } catch (e) { setStep('write', 'err'); fail(e.message); }
   })();
 }

@@ -193,7 +193,9 @@ route('GET', /^\/api\/settings$/, (req, res) => send(res, 200, getSettings()));
 route('PUT', /^\/api\/settings$/, async (req, res) => { setSettings(await readJson(req)); send(res, 200, { ok: true }); });
 
 // ===== 元数据 =====
-route('GET', /^\/api\/meta$/, (req, res) => send(res, 200, { platforms: SUPPORTED_PLATFORMS, defaultTemplate: defaultTemplate(), version: currentVersion(), bundled: process.env.APS_BUNDLED === '1' }));
+route('GET', /^\/api\/meta$/, (req, res) => send(res, 200, { platforms: SUPPORTED_PLATFORMS, defaultTemplate: defaultTemplate(), version: currentVersion(), bundled: process.env.APS_BUNDLED === '1', supervisor: process.env.APS_SUPERVISOR === '1' }));
+// 自重启：响应后退出进程，由原生壳守护自动拉起新进程（加载热更新后的新代码）
+route('POST', /^\/api\/_restart$/, (req, res) => { send(res, 200, { ok: true }); setTimeout(() => process.exit(0), 300); });
 
 // ===== 热更新 =====
 route('GET', /^\/api\/update\/check$/, async (req, res) => { try { send(res, 200, await checkUpdate()); } catch (e) { send(res, 500, { error: e.message }); } });
