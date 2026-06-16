@@ -3,7 +3,7 @@
 # 由 go.command release 自动调用：./scripts/upload.sh <release.json 绝对路径>
 # 前置一次性：brew install gh && gh auth login（仓库需为【公开】，App 才能匿名拉取）。
 set -euo pipefail
-export LC_ALL="${LC_ALL:-en_US.UTF-8}" LANG="${LANG:-en_US.UTF-8}"
+export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 REL="${1:?用法: upload.sh <release.json 路径>}"
 REPO="qq1184216345/autopost-studio"
 

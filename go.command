@@ -5,7 +5,7 @@
 #   release [版本] [说明]   发版热更新：升版本 → 生成 dist/release.json →（有 upload 钩子则）上传
 # 双击无参数时进入交互菜单。
 set -euo pipefail
-export LC_ALL="${LC_ALL:-en_US.UTF-8}" LANG="${LANG:-en_US.UTF-8}"
+export LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 cd "$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(pwd)"
 
@@ -87,7 +87,7 @@ cmd_release(){
   node scripts/build-update.mjs "$VER" "$NOTES"
   REL="$ROOT/dist/release.json"
   if [ -x scripts/upload.sh ]; then
-    c_warn "调用 scripts/upload.sh 上传…"; ./scripts/upload.sh "$REL" && c_ok "已上传。用户 App 即可热更新到 v$VER。"
+    c_warn "调用 scripts/upload.sh 上传…"; ./scripts/upload.sh "$REL" && c_ok "已上传。用户 App 即可热更新到 v${VER} 。"
   else
     c_ok "已生成：$REL"
     c_warn "把它上传到你的 update_url 指向的地址即完成发版（可写 scripts/upload.sh 自动化，见 scripts/upload.sh.example）。"
