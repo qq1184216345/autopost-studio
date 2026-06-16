@@ -257,7 +257,7 @@ async function renderAccounts() {
       <div class="pills"><span class="pill plat">${PLAT[a.platform] || a.platform}</span><span class="pill">${a.conn_mode === 'cdp' ? '外部CDP' : '本机浏览器'}</span></div>
       <div class="desc">品牌：${esc(a.brand_title || '-')}<br>${a.conn_mode === 'cdp' ? 'CDP：' + esc(a.cdp_url || '-') : '独立登录配置'}</div>
       <div class="row" style="margin-top:8px">
-        ${a.conn_mode === 'cdp' ? '' : `<button class="run sm" data-login="${a.id}">🔑 登录</button>`}
+        ${a.conn_mode === 'cdp' ? '' : `<button class="run sm" data-login="${a.id}">🌐 打开</button>`}
         <button class="sm" data-edit="${a.id}">编辑</button>
       </div>`;
     grid.appendChild(card);
@@ -267,9 +267,9 @@ async function renderAccounts() {
     if (lg) lg.onclick = async () => {
       lg.disabled = true; lg.textContent = '打开中…';
       const r = await api('POST', `/api/accounts/${a.id}/login`);
-      lg.disabled = false; lg.textContent = '🔑 登录';
+      lg.disabled = false; lg.textContent = '🌐 打开';
       if (r.error) toast('打开失败：' + r.error, 'err');
-      else toast(`已打开浏览器，请在其中登录${PLAT[a.platform] || ''}（登录后关掉那个窗口即可）`);
+      else toast(`已打开${PLAT[a.platform] || ''}：已登录直接进首页；未登录请登录，状态会自动保存`);
     };
   }
 }
@@ -285,8 +285,8 @@ function openAccountEditor(a) {
       <option value="cdp" ${cdp ? 'selected' : ''}>外部 CDP（指纹浏览器，高级）</option>
     </select>
     <div id="a_managed" style="display:${cdp ? 'none' : 'block'}">
-      <div class="hint">用你在「设置」里选的浏览器，为该账号开一份独立登录配置。${a.id ? '点下面按钮登录。' : '保存后再来编辑里登录。'}</div>
-      ${a.id ? `<div class="row" style="margin-top:8px"><button class="sm" id="a_login">🔑 登录此账号（开浏览器）</button><button class="sm" id="a_logindone">完成/关闭</button></div><span class="hint" id="a_loginhint"></span>` : ''}
+      <div class="hint">用你在「设置」里选的浏览器，为该账号开一份独立登录配置。${a.id ? '点「打开」进入该平台：已登录直接到首页，未登录请登录，状态会保存。' : '保存后回到编辑里「打开」。'}</div>
+      ${a.id ? `<div class="row" style="margin-top:8px"><button class="run sm" id="a_login">🌐 打开浏览器</button><button class="sm" id="a_logindone">关闭浏览器</button></div><span class="hint" id="a_loginhint"></span>` : ''}
     </div>
     <div id="a_cdpwrap" style="display:${cdp ? 'block' : 'none'}">
       <label>CDP 地址（指纹浏览器调试地址）</label><input id="a_cdp" value="${esc(a.cdp_url)}" placeholder="http://127.0.0.1:9223">
@@ -298,8 +298,8 @@ function openAccountEditor(a) {
   $('#a_mode', ov).onchange = syncMode;
   if (a.id) {
     const lg = $('#a_login', ov), ld = $('#a_logindone', ov);
-    if (lg) lg.onclick = async () => { $('#a_loginhint').textContent = '正在打开浏览器…在弹出的窗口里登录，完成后点「完成/关闭」'; const r = await api('POST', `/api/accounts/${a.id}/login`); if (r.error) $('#a_loginhint').textContent = '失败: ' + r.error; else $('#a_loginhint').textContent = '浏览器已打开，请在其中登录' + (PLAT[a.platform] || ''); };
-    if (ld) ld.onclick = async () => { await api('POST', `/api/accounts/${a.id}/login/done`); $('#a_loginhint').textContent = '已关闭登录窗口（登录态已保存）'; };
+    if (lg) lg.onclick = async () => { $('#a_loginhint').textContent = '正在打开浏览器…'; const r = await api('POST', `/api/accounts/${a.id}/login`); if (r.error) $('#a_loginhint').textContent = '失败: ' + r.error; else $('#a_loginhint').textContent = `已打开${PLAT[a.platform] || ''}：已登录直接进首页；未登录请登录，状态会自动保存`; };
+    if (ld) ld.onclick = async () => { await api('POST', `/api/accounts/${a.id}/login/done`); $('#a_loginhint').textContent = '已关闭浏览器（登录态已保存）'; };
   }
   $('#a_save', ov).onclick = async () => {
     const b = { name: $('#a_name').value.trim(), platform: $('#a_plat').value, conn_mode: $('#a_mode').value, cdp_url: (cdp || $('#a_mode').value === 'cdp') ? ($('#a_cdp') ? $('#a_cdp').value.trim() : '') : '', brand_title: $('#a_brand').value.trim(), note: $('#a_note').value.trim() };
