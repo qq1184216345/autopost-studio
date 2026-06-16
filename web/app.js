@@ -320,7 +320,7 @@ async function renderDrafts() {
   for (const d of list) {
     const card = document.createElement('div'); card.className = 'card';
     card.innerHTML = `<input type="checkbox" class="chk" data-id="${d.id}">
-      ${d.image_path ? `<img class="thumb" src="/uploads/${d.image_path}?t=${Date.now()}">` : '<div class="thumb"></div>'}
+      ${d.image_path ? `<div style="position:relative"><img class="thumb" src="/uploads/${d.image_path}?t=${Date.now()}">${(d.image_paths && d.image_paths.length > 1) ? `<span class="pill" style="position:absolute;top:14px;right:10px;background:rgba(0,0,0,.6);color:#fff">${d.image_paths.length}图</span>` : ''}</div>` : '<div class="thumb"></div>'}
       <div class="nm">${esc(d.title || '(未生成)')}</div>
       <div class="pills"><span class="pill ${d.status}">${ST[d.status]}</span>${d.platforms.map((p) => `<span class="pill plat">${PLAT[p] || p}</span>`).join('')}</div>
       <div class="desc">模板：${esc(d.template ? d.template.name : '-')} · 账号 ${d.targets.length}</div>
@@ -378,7 +378,7 @@ async function openDraft(id) {
       </div>
       <div>
         <label>配图预览</label>
-        ${d.image_path ? `<div id="pw" style="position:relative;width:100%;overflow:hidden;border:1px solid var(--line);border-radius:10px;background:#000"><img src="/uploads/${d.image_path}?t=${Date.now()}" style="width:100%;display:block"></div>` : '<div class="muted">尚无配图，点「AI 出内容+配图」或「上传图片」。</div>'}
+        ${(d.image_paths && d.image_paths.length) ? `<div class="muted" style="margin-bottom:6px">共 ${d.image_paths.length} 张（长内容自动分页）</div>` + d.image_paths.map((f, i) => `<div style="position:relative;margin-bottom:8px"><img src="/uploads/${f}?t=${Date.now()}" style="width:100%;display:block;border:1px solid var(--line);border-radius:10px"><span class="pill" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);color:#fff">${i + 1}/${d.image_paths.length}</span></div>`).join('') : (d.image_path ? `<img src="/uploads/${d.image_path}?t=${Date.now()}" style="width:100%;display:block;border:1px solid var(--line);border-radius:10px">` : '<div class="muted">尚无配图，点「AI 出内容+配图」或「上传图片」。</div>')}
         <label style="margin-top:14px">发布</label>
         <div class="row"><select id="d_mode"><option value="draft">存草稿(稳)</option><option value="publish">直接发布</option></select>
           <button class="run sm" id="d_pub">▶ 发布选中目标</button></div>

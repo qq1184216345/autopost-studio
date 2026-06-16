@@ -6,7 +6,8 @@ import { resolve, basename, extname } from 'node:path';
 import { all, get, run, batchDelete, getSettings, setSettings, touch, UPLOADS_DIR, ROOT } from './lib/db.mjs';
 import { validateTemplate, defaultTemplate, SUPPORTED_PLATFORMS } from './lib/template-spec.mjs';
 import { generateTemplate, editTemplate, genContent } from './lib/ai.mjs';
-import { renderImage, publishDraft } from './lib/publish.mjs';
+import { publishDraft } from './lib/publish.mjs';
+import { renderImages } from './lib/render.mjs';
 import { detectBrowsers, launchScratch, openLogin, closeLogin } from './lib/browser.mjs';
 import { buildHtml } from './lib/render.mjs';
 import { checkUpdate, applyUpdate, currentVersion } from './lib/updater.mjs';
@@ -33,7 +34,7 @@ function draftOut(r) {
     FROM draft_targets dt JOIN accounts a ON a.id=dt.account_id WHERE dt.draft_id=? ORDER BY dt.id`, r.id);
   const status = targets.length && targets.every((t) => t.status === 'published') ? 'published' : 'pending';
   return { id: r.id, title: r.title, brand_title: r.brand_title, paragraphs: JSON.parse(r.paragraphs || '[]'),
-    hashtags: JSON.parse(r.hashtags || '[]'), caption: r.caption, image_path: r.image_path, image_source: r.image_source,
+    hashtags: JSON.parse(r.hashtags || '[]'), caption: r.caption, image_path: r.image_path, image_paths: (() => { try { return JSON.parse(r.image_paths || '[]'); } catch { return []; } })(), image_source: r.image_source,
     template_id: r.template_id, template: tpl ? { id: tpl.id, name: tpl.name } : null, platforms, targets, status,
     created_at: r.created_at, updated_at: r.updated_at };
 }
@@ -112,12 +113,12 @@ route('POST', /^\/api\/drafts\/(\d+)\/generate$/, async (req, res, m) => {
     if (!tpl) return send(res, 400, { error: '草稿未关联模板，无法生成' });
     const brand = draft.brand_title || tpl.name;
     const content = await genContent({ brandTitle: brand, template: tpl, theme: b.theme || draft.title });
-    const file = `draft-${id}-${Date.now()}.png`;
     const sc = await launchScratch();
-    try { await renderImage(sc.browser, { brandTitle: brand, title: content.title, paragraphs: content.paragraphs, footer: tpl.spec?.content?.footer, visual: tpl.spec?.visual, outPath: resolve(UPLOADS_DIR, file) }); }
+    let files;
+    try { files = await renderImages(sc.browser, { brandTitle: brand, title: content.title, paragraphs: content.paragraphs, footer: tpl.spec?.content?.footer, visual: tpl.spec?.visual, outDir: UPLOADS_DIR + '/', prefix: `draft-${id}` }); }
     finally { await sc.close(); }
     const caption = buildCaption(tpl, content.title);
-    run('UPDATE drafts SET title=?,paragraphs=?,caption=?,image_path=?,image_source=?,updated_at=datetime(\'now\') WHERE id=?', content.title, JSON.stringify(content.paragraphs), caption, file, 'ai', id);
+    run('UPDATE drafts SET title=?,paragraphs=?,caption=?,image_path=?,image_paths=?,image_source=?,updated_at=datetime(\'now\') WHERE id=?', content.title, JSON.stringify(content.paragraphs), caption, files[0] || '', JSON.stringify(files), 'ai', id);
     send(res, 200, draftOut(get('SELECT * FROM drafts WHERE id=?', id)));
   } catch (e) { send(res, 500, { error: e.message }); }
 });
@@ -128,11 +129,11 @@ route('POST', /^\/api\/drafts\/(\d+)\/render$/, async (req, res, m) => {
     const id = +m[1]; const draft = get('SELECT * FROM drafts WHERE id=?', id); if (!draft) return send(res, 404, { error: '草稿不存在' });
     const tpl = draft.template_id ? tplOut(get('SELECT * FROM templates WHERE id=?', draft.template_id)) : null;
     if (!tpl) return send(res, 400, { error: '无模板' });
-    const file = `draft-${id}-${Date.now()}.png`;
     const sc = await launchScratch();
-    try { await renderImage(sc.browser, { brandTitle: draft.brand_title || tpl.name, title: draft.title, paragraphs: JSON.parse(draft.paragraphs || '[]'), footer: tpl.spec?.content?.footer, visual: tpl.spec?.visual, outPath: resolve(UPLOADS_DIR, file) }); }
+    let files;
+    try { files = await renderImages(sc.browser, { brandTitle: draft.brand_title || tpl.name, title: draft.title, paragraphs: JSON.parse(draft.paragraphs || '[]'), footer: tpl.spec?.content?.footer, visual: tpl.spec?.visual, outDir: UPLOADS_DIR + '/', prefix: `draft-${id}` }); }
     finally { await sc.close(); }
-    run('UPDATE drafts SET image_path=?,image_source=?,updated_at=datetime(\'now\') WHERE id=?', file, 'ai', id);
+    run('UPDATE drafts SET image_path=?,image_paths=?,image_source=?,updated_at=datetime(\'now\') WHERE id=?', files[0] || '', JSON.stringify(files), 'ai', id);
     send(res, 200, draftOut(get('SELECT * FROM drafts WHERE id=?', id)));
   } catch (e) { send(res, 500, { error: e.message }); }
 });
@@ -144,7 +145,7 @@ route('POST', /^\/api\/drafts\/(\d+)\/image$/, async (req, res, m, u) => {
     const ext = (extname(u.searchParams.get('name') || '') || '.png').toLowerCase();
     const file = `draft-${id}-${Date.now()}${MIME[ext] ? ext : '.png'}`;
     writeFileSync(resolve(UPLOADS_DIR, file), buf);
-    run('UPDATE drafts SET image_path=?,image_source=?,updated_at=datetime(\'now\') WHERE id=?', file, 'upload', id);
+    run('UPDATE drafts SET image_path=?,image_paths=?,image_source=?,updated_at=datetime(\'now\') WHERE id=?', file, JSON.stringify([file]), 'upload', id);
     send(res, 200, draftOut(get('SELECT * FROM drafts WHERE id=?', id)));
   } catch (e) { send(res, 500, { error: e.message }); }
 });
