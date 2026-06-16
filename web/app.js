@@ -67,6 +67,7 @@ async function renderTemplates() {
       <select id="tplPf">${platOptions(platFilter)}</select>
       <button class="primary sm" onclick="openTemplateEditor()">＋ 新建模板</button>
       <button class="sm" onclick="openAiGen()">✨ AI 生成模板</button>
+      <button class="sm" onclick="importTemplate()">⇩ 导入模板</button>
       <span class="sp"></span>
       <button class="danger sm" id="tplDel" disabled onclick="batchDel('templates',tplSel,renderTemplates)">批量删除</button>
     </div>
@@ -81,13 +82,26 @@ async function renderTemplates() {
       <div class="pills">${t.platforms.map((p) => `<span class="pill plat">${PLAT[p] || p}</span>`).join('')}</div>
       <div class="prev"></div>
       <div class="desc">${esc(t.description)}</div>
-      <div class="row" style="margin-top:8px"><button class="sm" data-edit="${t.id}">编辑</button></div>`;
+      <div class="row" style="margin-top:8px"><button class="sm" data-edit="${t.id}">编辑</button><button class="sm" data-exp="${t.id}">导出</button></div>`;
     grid.appendChild(card);
     mountPreview($('.prev', card), { brandTitle: t.name, spec: t.spec, visual: t.spec.visual });
     $('.chk', card).onchange = (e) => { e.target.checked ? tplSel.add(t.id) : tplSel.delete(t.id); card.classList.toggle('sel', e.target.checked); $('#tplDel').disabled = !tplSel.size; };
     $('[data-edit]', card).onclick = () => openTemplateEditor(t);
+    $('[data-exp]', card).onclick = async () => { const r = await api('POST', `/api/templates/${t.id}/export`); if (r.ok) alert('已导出模板文件（.apstpl）并打开所在文件夹：\n' + r.path); else alert('导出失败: ' + (r.error || '')); };
   }
 }
+// 导入模板：选 .apstpl/.json 文件 → 解析 → 落库
+function importTemplate() {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.apstpl,.json,application/json';
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    let obj; try { obj = JSON.parse(await f.text()); } catch { return alert('文件不是有效的 JSON'); }
+    const r = await api('POST', '/api/templates/import', obj);
+    if (r.ok) { alert('已导入模板：' + r.name); renderTemplates(); } else alert('导入失败: ' + (r.error || ''));
+  };
+  inp.click();
+}
+
 function platOptions(sel, withAll = true) {
   return (withAll ? `<option value="">全部平台</option>` : '') + META.platforms.map((p) => `<option value="${p}" ${p === sel ? 'selected' : ''}>${PLAT[p] || p}</option>`).join('');
 }
@@ -439,9 +453,39 @@ async function renderSettings() {
       <button class="sm" id="s_check" style="flex:0 0 auto">检查更新</button></div>
     <div id="s_upinfo" class="hint" style="margin-top:6px"></div>
 
+    <h3 style="margin:16px 0 6px">备份 / 还原</h3>
+    <p class="hint">备份会把<b>全部数据（模板/账号/草稿/设置 + 所有配图）</b>打包成一个 .apsbak 文件，换机器搬这个文件即可。</p>
+    <div class="row" style="max-width:360px">
+      <button class="sm" id="s_backup">💾 一键备份</button>
+      <button class="sm" id="s_restore">♻️ 还原备份</button>
+    </div>
+    <div id="s_bakinfo" class="hint" style="margin-top:6px"></div>
+
     <div class="right-actions"><button class="primary" id="s_save">保存</button></div>
     <p class="hint" id="s_hint"></p>
   </div>`;
+  $('#s_backup').onclick = async () => {
+    const info = $('#s_bakinfo'); info.textContent = '备份中…';
+    const r = await api('POST', '/api/backup');
+    if (r.ok) info.innerHTML = `✅ 已备份（含 ${r.uploads} 张配图）并打开文件夹：<br>${esc(r.path)}<br>把这个 .apsbak 文件拷到新机器，用「还原备份」导入即可。`;
+    else info.innerHTML = `<span style="color:var(--danger)">备份失败：${esc(r.error || '')}</span>`;
+  };
+  $('#s_restore').onclick = () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.apsbak,.json,application/json';
+    inp.onchange = async () => {
+      const f = inp.files[0]; if (!f) return;
+      if (!confirm('还原会用备份覆盖当前全部数据（模板/账号/草稿/设置），确定？')) return;
+      const info = $('#s_bakinfo'); info.textContent = '还原中…';
+      let obj; try { obj = JSON.parse(await f.text()); } catch { return alert('文件不是有效的备份(.apsbak)'); }
+      const r = await api('POST', '/api/restore', obj);
+      if (!r.ok) { info.innerHTML = `<span style="color:var(--danger)">还原失败：${esc(r.error || '')}</span>`; return; }
+      info.textContent = '已写入，正在重启应用以加载还原的数据…';
+      const inv = window.__TAURI__?.core?.invoke;
+      if (inv) { try { await inv('restart_backend'); } catch (e) { /* reload 会断连 */ } }
+      else { alert('已还原，请重开应用生效'); location.reload(); }
+    };
+    inp.click();
+  };
   $('#s_detect').onclick = async () => {
     const list = await api('GET', '/api/browsers');
     $('#s_blist').innerHTML = list.length ? list.map((b) => `<button class="sm" data-p="${esc(b.path)}">${esc(b.name)}</button>`).join('') : '<span class="hint">没检测到 Chromium 系浏览器，请安装 Chrome 或手填路径。</span>';

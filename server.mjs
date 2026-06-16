@@ -10,6 +10,7 @@ import { renderImage, publishDraft } from './lib/publish.mjs';
 import { detectBrowsers, launchScratch, openLogin, closeLogin } from './lib/browser.mjs';
 import { buildHtml } from './lib/render.mjs';
 import { checkUpdate, applyUpdate, currentVersion } from './lib/updater.mjs';
+import { createBackup, applyRestore, exportTemplate, parseTemplateImport } from './lib/backup.mjs';
 
 const PORT = Number(process.env.PORT) || 8787;
 const WEB = resolve(ROOT, 'web');
@@ -196,6 +197,19 @@ route('GET', /^\/api\/meta$/, (req, res) => send(res, 200, { platforms: SUPPORTE
 // ===== 热更新 =====
 route('GET', /^\/api\/update\/check$/, async (req, res) => { try { send(res, 200, await checkUpdate()); } catch (e) { send(res, 500, { error: e.message }); } });
 route('POST', /^\/api\/update\/apply$/, async (req, res) => { try { send(res, 200, await applyUpdate()); } catch (e) { send(res, 500, { error: e.message }); } });
+
+// ===== 模板导入/导出 + 备份/还原（自有协议）=====
+route('POST', /^\/api\/templates\/(\d+)\/export$/, (req, res, m) => { try { const row = get('SELECT * FROM templates WHERE id=?', +m[1]); if (!row) return send(res, 404, { error: '模板不存在' }); send(res, 200, exportTemplate(row)); } catch (e) { send(res, 500, { error: e.message }); } });
+route('POST', /^\/api\/templates\/import$/, async (req, res) => {
+  try {
+    const tpl = parseTemplateImport(await readJson(req));
+    const { value, errors } = validateTemplate(tpl);
+    const info = run('INSERT INTO templates(name,description,platforms,spec) VALUES(?,?,?,?)', value.name, value.description, JSON.stringify(value.platforms), JSON.stringify(value.spec));
+    send(res, 200, { ok: true, id: Number(info.lastInsertRowid), name: value.name, warnings: errors });
+  } catch (e) { send(res, 500, { error: e.message }); }
+});
+route('POST', /^\/api\/backup$/, (req, res) => { try { send(res, 200, createBackup()); } catch (e) { send(res, 500, { error: e.message }); } });
+route('POST', /^\/api\/restore$/, async (req, res) => { try { send(res, 200, applyRestore(await readJson(req))); } catch (e) { send(res, 500, { error: e.message }); } });
 
 // —— server ——
 const server = createServer(async (req, res) => {
