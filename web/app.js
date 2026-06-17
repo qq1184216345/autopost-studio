@@ -257,7 +257,7 @@ async function renderAccounts() {
       <div class="pills"><span class="pill plat">${PLAT[a.platform] || a.platform}</span><span class="pill">${a.conn_mode === 'cdp' ? '外部CDP' : '本机浏览器'}</span></div>
       <div class="desc">品牌：${esc(a.brand_title || '-')}<br>${a.conn_mode === 'cdp' ? 'CDP：' + esc(a.cdp_url || '-') : '独立登录配置'}</div>
       <div class="row" style="margin-top:8px">
-        ${a.conn_mode === 'cdp' ? '' : `<button class="run sm" data-login="${a.id}">🌐 打开</button>`}
+        ${a.conn_mode === 'cdp' ? '' : `<button class="run sm" data-login="${a.id}">🌐 打开</button><button class="sm" data-close="${a.id}">关闭</button>`}
         <button class="sm" data-edit="${a.id}">编辑</button>
       </div>`;
     grid.appendChild(card);
@@ -270,6 +270,13 @@ async function renderAccounts() {
       lg.disabled = false; lg.textContent = '🌐 打开';
       if (r.error) toast('打开失败：' + r.error, 'err');
       else toast(`已打开${PLAT[a.platform] || ''}：已登录直接进首页；未登录请登录，状态会自动保存`);
+    };
+    const cl = $('[data-close]', card);
+    if (cl) cl.onclick = async () => {
+      cl.disabled = true; cl.textContent = '关闭中…';
+      await api('POST', `/api/accounts/${a.id}/login/done`).catch(() => {});
+      cl.disabled = false; cl.textContent = '关闭';
+      toast('已关闭浏览器（登录态已保存）');
     };
   }
 }
