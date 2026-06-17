@@ -103,12 +103,13 @@ async function renderTemplates() {
       <div class="pills">${t.platforms.map((p) => `<span class="pill plat">${PLAT[p] || p}</span>`).join('')}</div>
       <div class="prev"></div>
       <div class="desc">${esc(t.description)}</div>
-      <div class="row" style="margin-top:8px"><button class="sm" data-edit="${t.id}">编辑</button><button class="sm" data-exp="${t.id}">导出</button></div>`;
+      <div class="row" style="margin-top:8px"><button class="sm" data-edit="${t.id}">编辑</button><button class="sm" data-prompt="${t.id}">提示词</button><button class="sm" data-exp="${t.id}">导出</button></div>`;
     grid.appendChild(card);
     mountPreview($('.prev', card), { brandTitle: t.name, spec: t.spec, visual: t.spec.visual });
     $('.chk', card).onchange = (e) => { e.target.checked ? tplSel.add(t.id) : tplSel.delete(t.id); card.classList.toggle('sel', e.target.checked); $('#tplDel').disabled = !tplSel.size; };
     $('[data-edit]', card).onclick = () => openTemplateEditor(t);
     $('[data-exp]', card).onclick = async () => { const r = await api('POST', `/api/templates/${t.id}/export`); if (r.ok) toast('已导出模板并打开所在文件夹'); else toast('导出失败: ' + (r.error || ''), 'err'); };
+    $('[data-prompt]', card).onclick = () => showTemplatePrompt(t.id, t.name);
   }
 }
 // 导入模板：选 .apstpl/.json 文件 → 解析 → 落库
@@ -121,6 +122,20 @@ function importTemplate() {
     if (r.ok) { toast('已导入模板：' + r.name); renderTemplates(); } else toast('导入失败: ' + (r.error || ''), 'err');
   };
   inp.click();
+}
+
+// 查看模板的「复刻提示词」：把它粘到「AI 生成模板」即可造出一模一样的
+async function showTemplatePrompt(id, name) {
+  const r = await api('GET', `/api/templates/${id}/prompt`);
+  if (r.error) return toast(r.error, 'err');
+  const ov = modal(`<div class="modal" style="max-width:640px"><h2>提示词 · ${esc(name)}</h2>
+    <p class="hint">把下面这段复制到「✨ AI 生成模板」，即可复刻出这个模板（配色/字体等已写死，结果一致）。</p>
+    <textarea id="tp_text" style="min-height:300px;font:12px/1.6 ui-monospace,Menlo,monospace" readonly>${esc(r.prompt)}</textarea>
+    <div class="right-actions"><button onclick="closeModal()">关闭</button><button class="primary" id="tp_copy">复制</button></div></div>`);
+  $('#tp_copy', ov).onclick = async () => {
+    try { await navigator.clipboard.writeText(r.prompt); toast('已复制'); }
+    catch { const ta = $('#tp_text', ov); ta.removeAttribute('readonly'); ta.select(); document.execCommand('copy'); ta.setAttribute('readonly', ''); toast('已复制'); }
+  };
 }
 
 function platOptions(sel, withAll = true) {

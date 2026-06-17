@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve, basename, extname } from 'node:path';
 import { all, get, run, batchDelete, getSettings, setSettings, touch, UPLOADS_DIR, ROOT } from './lib/db.mjs';
-import { validateTemplate, defaultTemplate, SUPPORTED_PLATFORMS } from './lib/template-spec.mjs';
+import { validateTemplate, defaultTemplate, SUPPORTED_PLATFORMS, buildPromptFromTemplate } from './lib/template-spec.mjs';
 import { generateTemplate, editTemplate, genContent } from './lib/ai.mjs';
 import { publishDraft } from './lib/publish.mjs';
 import { renderImages } from './lib/render.mjs';
@@ -203,6 +203,7 @@ route('POST', /^\/api\/update\/apply$/, async (req, res) => { try { send(res, 20
 
 // ===== 模板导入/导出 + 备份/还原（自有协议）=====
 route('POST', /^\/api\/templates\/(\d+)\/export$/, (req, res, m) => { try { const row = get('SELECT * FROM templates WHERE id=?', +m[1]); if (!row) return send(res, 404, { error: '模板不存在' }); send(res, 200, exportTemplate(row)); } catch (e) { send(res, 500, { error: e.message }); } });
+route('GET', /^\/api\/templates\/(\d+)\/prompt$/, (req, res, m) => { const t = tplOut(get('SELECT * FROM templates WHERE id=?', +m[1])); if (!t) return send(res, 404, { error: '模板不存在' }); send(res, 200, { prompt: buildPromptFromTemplate(t) }); });
 route('POST', /^\/api\/templates\/import$/, async (req, res) => {
   try {
     const tpl = parseTemplateImport(await readJson(req));
