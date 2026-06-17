@@ -2,7 +2,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const PLAT = { xhs: '小红书', douyin: '抖音', wxsph: '视频号' };
+const PLAT = { xhs: '小红书', douyin: '抖音', wxsph: '视频号', mp: '公众号' };
 const ST = { pending: '待发布', published: '已发布', publishing: '发布中', failed: '失败' };
 async function api(method, url, body) {
   const o = { method, headers: {} };
