@@ -8,3 +8,6 @@ src-tauri/target/
 dist/
 dist-installer/
 backups/
+
+# OMC 编排会话状态（本地工具产物，勿提交）
+.omc/
